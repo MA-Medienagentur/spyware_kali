@@ -9,7 +9,7 @@ class DeviceSearchWindow(QWidget):
         self.output.setReadOnly(True)
         self.search_input = QLineEdit()
         self.search_types = QComboBox()
-        self.search_types.addItems(["IP Address", "Phone Number", "MAC Address", "Bluetooth"])
+        self.search_types.addItems(["IP Address", "Phone Number", "MAC Address"])
         self.search_btn = QPushButton("Suchen")
         self.results_list = QListWidget()
         layout = QVBoxLayout()
@@ -37,15 +37,54 @@ class DeviceSearchWindow(QWidget):
                 query = clean_query
             response = requests.get(f"https://phone-api.com/search?number={query}")
         elif search_type == "IP Address":
-            response = requests.get(f"https://ip-api.com/json/{query}")
+            if not query.strip():
+                # Automatischer Netzwerkscan im Hintergrund-Thread
+                import threading
+                import subprocess
+                import re
+                def scan_network():
+                    self.output.append("[+] Starte Netzwerkscan im lokalen Subnetz...")
+                    try:
+                        ip_route = subprocess.check_output(["ip", "route"], text=True)
+                        match = re.search(r'(\d+\.\d+\.\d+\.\d+/\d+)', ip_route)
+                        subnet = match.group(1) if match else "192.168.1.0/24"
+                    except Exception:
+                        subnet = "192.168.1.0/24"
+                    self.output.append(f"[+] Scanne Subnetz: {subnet}")
+                    try:
+                        nmap_out = subprocess.check_output(["nmap", "-sn", subnet], text=True)
+                        ips = re.findall(r'Nmap scan report for (\d+\.\d+\.\d+\.\d+)', nmap_out)
+                        self.results_list.clear()
+                        for ip in ips:
+                            self.results_list.addItem(ip)
+                        self.output.append(f"[+] {len(ips)} Geräte gefunden.")
+                        # Nach Scan: Auswahl eines Geräts als Target durch Klick
+                        def select_ip_target(item):
+                            ip = item.text()
+                            self.output.append(f"[+] Ziel ausgewählt: {ip}")
+                            from main import show_main_window
+                            self.main_window = show_main_window()
+                            self.main_window.findChild(type(self)).ip_input.setText(ip)
+                            self.close()
+                        self.results_list.itemClicked.connect(select_ip_target)
+                    except Exception as e:
+                        self.output.append(f"[-] Netzwerkscan-Fehler: {str(e)}")
+                threading.Thread(target=scan_network, daemon=True).start()
+                return
+            else:
+                response = requests.get(f"https://ip-api.com/json/{query}")
         elif search_type == "MAC Address":
             response = requests.get(f"https://macvendors.com/query/{query}")
-        elif search_type == "Bluetooth":
-            self.output.append("[+] Bluetooth-Suche ist auf diesem System nicht aktiviert.")
-            return
+        # Bluetooth capability removed
         if response:
             try:
                 results = response.json()
+                # Automatische Anzeige von IP-Adresse und Gerätedaten, falls vorhanden
+                if search_type == "Phone Number" and isinstance(results, dict):
+                    ip = results.get('ip') or results.get('ip_address')
+                    device = results.get('device') or results.get('model') or results.get('type')
+                    info = f"Gefunden: IP={ip}, Gerät={device}" if ip or device else str(results)
+                    self.output.append(info)
                 self.populate_results(results)
             except Exception as e:
                 self.output.append(f"[-] Fehler beim Parsen der Ergebnisse: {str(e)}")

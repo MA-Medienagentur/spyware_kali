@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Spyware Framework
+Comment=ZeroClick Spyware Framework
+Exec=spyware-framework
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Utility;Network;
